@@ -146,6 +146,9 @@
   var MAX_PULL = 92;            // sola en fazla çekiş (px)
   var MAX_PUSH = 18;            // sağa en fazla çekiş (px): kenara yakın, az yer var
   var TAP_PULL = -28;           // dokunma ya da klavye ile çalışta tel bu kadar çekilmiş sayılır
+  var HOLE_AT = 0.56;           // ses deliğinin telin üstündeki yeri (üstten oran)
+  var LEAN = 0.12;              // fare yaklaşınca tel imlece doğru bu oranda esner…
+  var LEAN_MAX = 4;             // …en fazla bu kadar (px)
 
   function mount() {
     var copy = (root.lang || "tr").toLowerCase().indexOf("tr") === 0 ? COPY.tr : COPY.en;
@@ -154,6 +157,7 @@
     tel.className = "tel";
     tel.innerHTML =
       '<svg aria-hidden="true" focusable="false">' +
+      '<circle class="rosette thin"></circle><circle class="rosette"></circle><circle class="hole"></circle>' +
       '<path class="ghost"></path><path class="ghost"></path><path class="string"></path>' +
       "</svg>" +
       '<span class="tel-hint" aria-hidden="true">' + copy.hint + "</span>" +
@@ -164,12 +168,15 @@
     var ghosts = [paths[0], paths[1]];
     var string = paths[2];
     var note = tel.querySelector(".tel-note");
+    var hint = tel.querySelector(".tel-hint");
+    var circles = tel.querySelectorAll("circle");
 
     var width = 0;
     var height = 0;
     var x = 0;
     var shapes = [];            // harmonik başına telin şekli: sin(nπy/L)
     var held = null;            // çekilirken: { id, startX, y, pull, moved }
+    var leaning = null;         // fare yakındayken: { pull, y }
     var ringing = null;         // titreşirken: { start, amplitudes }
     var trail = [];
     var frame = 0;
@@ -192,6 +199,17 @@
         for (var k = 0; k < POINTS; k++) row[k] = Math.sin(n * Math.PI * k / (POINTS - 1));
         shapes.push(row);
       }
+
+      // Ses deliği ve rozet halkaları telin arkasında, ekran kenarına taşmadan; ipucu yazısı deliğin üstünde.
+      var outer = x - 2;
+      var holeY = Math.round(height * HOLE_AT);
+      for (var i = 0; i < circles.length; i++) {
+        circles[i].setAttribute("cx", x);
+        circles[i].setAttribute("cy", holeY);
+        circles[i].setAttribute("r", outer - [0, 3, 6][i]);
+      }
+      hint.style.top = (holeY - outer - 12) + "px";
+
       if (!held && !ringing) drawStraight();
     }
 
@@ -201,9 +219,9 @@
       trail = [];
     }
 
-    // Çekilen tel iki düz parçadır: köşe parmağın olduğu yerde.
-    function drawHeld() {
-      string.setAttribute("d", "M" + x + " 0L" + (x + held.pull).toFixed(2) + " " + held.y.toFixed(2) + "L" + x + " " + height);
+    // Çekilen tel iki düz parçadır: köşe parmağın (ya da imlecin) olduğu yerde.
+    function drawBent(pull, y) {
+      string.setAttribute("d", "M" + x + " 0L" + (x + pull).toFixed(2) + " " + y.toFixed(2) + "L" + x + " " + height);
     }
 
     // Üçgen şeklin harmoniklere ayrılışı: b_n = 2h·sin(nπp) / (n²π²·p(1−p)).
@@ -304,19 +322,35 @@
       try { tel.setPointerCapture(event.pointerId); } catch (e) { /* eski tarayıcı */ }
       tel.classList.add("is-held");
       ringing = null;
+      leaning = null;
       drawStraight();
       muteNote();
       audioContext(); // ses bağlamı kullanıcı hareketi içinde açılmalı (tarayıcı kuralı)
-      drawHeld();
+      drawBent(held.pull, held.y);
     });
 
     tel.addEventListener("pointermove", function (event) {
-      if (!held || event.pointerId !== held.id) return;
-      var dx = event.clientX - held.startX;
-      if (Math.abs(dx) > 4) held.moved = true;
-      held.pull = resist(dx);
-      held.y = clampY(event.clientY);
-      drawHeld();
+      if (held) {
+        if (event.pointerId !== held.id) return;
+        var dx = event.clientX - held.startX;
+        if (Math.abs(dx) > 4) held.moved = true;
+        held.pull = resist(dx);
+        held.y = clampY(event.clientY);
+        drawBent(held.pull, held.y);
+        return;
+      }
+      // Fare yaklaşınca tel imlece doğru hafifçe esner: dokunulabilir olduğunu gösterir.
+      if (event.pointerType !== "mouse" || ringing || reducedMotion.matches) return;
+      var offset = event.clientX - tel.getBoundingClientRect().left - x;
+      leaning = { pull: Math.max(-LEAN_MAX, Math.min(LEAN_MAX, offset * LEAN)), y: clampY(event.clientY) };
+      drawBent(leaning.pull, leaning.y);
+    });
+
+    // İmleç uzaklaşınca esneyen tel sessizce titreyerek yerine döner.
+    tel.addEventListener("pointerleave", function () {
+      if (!leaning || held) return;
+      release(leaning.pull, Math.min(0.96, Math.max(0.04, leaning.y / height)));
+      leaning = null;
     });
 
     function letGo(event, play) {
@@ -340,7 +374,7 @@
     tel.addEventListener("click", function (event) {
       if (event.detail !== 0) return;
       muteNote();
-      pluck(TAP_PULL, height / 2);
+      pluck(TAP_PULL, height * HOLE_AT);
     });
 
     window.addEventListener("resize", measure);
@@ -348,10 +382,10 @@
     label();
     measure();
 
-    // İlk ziyarette tel bir kez hafifçe kıpırdar: dokunulabilir olduğunu sessizce gösterir.
+    // İlk ziyarette tel bir kez kıpırdar: dokunulabilir olduğunu sessizce gösterir.
     if (!savedTheme() && !reducedMotion.matches) {
       setTimeout(function () {
-        if (!held && !ringing) release(-9, 0.42);
+        if (!held && !ringing && !leaning) release(-16, HOLE_AT);
       }, 1200);
     }
   }

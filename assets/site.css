@@ -40,7 +40,9 @@
   --on-accent: #fffdf9;
   --link: #8a3f1c;
   --bar-mid: #8a3f1c;
-  --string: #8a4a26;
+  --string: #a5602f;
+  --hole: #2a1a11;
+  --rosette: #c1602c;
   --frame: #17110d;
   --frame-shadow: 0 30px 50px -30px rgba(70, 38, 18, 0.5);
   --headline: "Plus Jakarta Sans", "Inter", system-ui, sans-serif;
@@ -65,6 +67,8 @@
     --link: #a99df5;
     --bar-mid: #f3f1fa;
     --string: #cbc4e6;
+    --hole: #07050c;
+    --rosette: #8b7bf0;
     --frame: #050409;
     --frame-shadow: 0 0 0 1px rgba(243, 241, 250, 0.07);
   }
@@ -83,6 +87,8 @@
   --link: #a99df5;
   --bar-mid: #f3f1fa;
   --string: #cbc4e6;
+  --hole: #07050c;
+  --rosette: #8b7bf0;
   --frame: #050409;
   --frame-shadow: 0 0 0 1px rgba(243, 241, 250, 0.07);
 }
@@ -287,13 +293,16 @@ th { font-family: var(--headline); font-weight: 700; }
 .tel path { fill: none; stroke: var(--string); stroke-linecap: round; stroke-linejoin: round; }
 .tel .string { stroke-width: 2; }
 .tel .ghost { stroke-width: 2; opacity: 0; }
+.tel .hole { fill: var(--hole); }
+.tel .rosette { fill: none; stroke: var(--rosette); stroke-width: 2.5; }
+.tel .rosette.thin { stroke-width: 1.2; opacity: 0.7; }
 
 .tel-hint {
   position: absolute;
   top: 50%;
   right: calc(var(--zone) / 2 + 9px);
   writing-mode: vertical-rl;
-  transform: translateY(-50%) rotate(180deg);
+  transform: translateY(-100%) rotate(180deg);
   color: var(--muted);
   font-size: 12px;
   white-space: nowrap;
